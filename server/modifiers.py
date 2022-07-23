@@ -58,8 +58,8 @@ class Modifiers:
         except KeyError:
             # No values were changed
             pass
-        finally:
-            return line_diffs
+
+        return line_diffs
 
     def remove_indentation(self) -> Self:
         """A code modifier that causes an IndentationError.
@@ -102,7 +102,7 @@ class Modifiers:
     def change_keyword(self) -> Self:
         """A code modifier that causes a SyntaxError.
 
-        This will change any of the python keywords to "kappa".
+        This will change any of the python keywords.
 
         Returns:
             The modifier instance.
@@ -142,7 +142,7 @@ class Modifiers:
     def change_function_call_name(self) -> Self:
         """A code modifier that causes a NameError.
 
-        Where a function is called, the name of that function will be changed to `cj9_kappa`.
+        Where a function is called, the name of that function will be changed.
 
         Returns:
             The modifier instance.
@@ -173,7 +173,9 @@ class Modifiers:
                 func_match = re.match(rf".*\.?({func_name}\().*", line)
 
                 if func_match:
-                    self.modified_contents[num] = self.modified_contents[num].replace(func_name, "cj9_kappa")
+                    self.modified_contents[num] = self.modified_contents[num].replace(
+                        func_name, random.choice(STATEMENTS)
+                    )
 
         return self
 
