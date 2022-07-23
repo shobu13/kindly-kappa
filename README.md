@@ -1,9 +1,11 @@
 # Python Discord Code Jam Repository Template
 
 ## A Primer
+
 Hello code jam participants! We've put together this repository template for you to use in [our code jams](https://pythondiscord.com/events/) or even other Python events!
 
 This document will contain the following information:
+
 1. [What does this template contain?](#what-does-this-template-contain)
 2. [How do I use it?](#how-do-i-use-it)
 3. [How do I adapt it to my project?](#how-do-i-adapt-it-to-my-project)
@@ -13,6 +15,7 @@ You can also look at [our style guide](https://pythondiscord.com/events/code-jam
 ## What does this template contain?
 
 Here is a quick rundown of what each file in this repository contains:
+
 - `LICENSE`: [The MIT License](https://opensource.org/licenses/MIT), an OSS approved license which grants rights to everyone to use and modify your projects and limits your liability. We highly recommend you to read the license.
 - `.gitignore`: A list of files that will be ignored by Git. Most of them are auto-generated or contain data that you wouldn't want to share publicly.
 - `dev-requirements.txt`: Every PyPI packages used for the project's development, to ensure a common and maintainable code style. [More on that below](#using-the-default-pip-setup).
@@ -26,6 +29,7 @@ Each of these files have comments for you to understand easily, and modify to fi
 
 Our first and probably most important tool is flake8. It will run a set of plugins on your codebase and warn you about any non-conforming lines.
 Here is a sample output:
+
 ```
 ~> flake8
 ./app.py:1:6: N802 function name 'helloWorld' should be lowercase
@@ -40,10 +44,12 @@ Then comes the error code, a unique identifier of the error, and then a human-re
 
 If, for any reason, you do not wish to comply with this specific error on a specific line, you can add `# noqa: CODE` at the end of the line.
 For example:
+
 ```python
 def helloWorld():  # noqa: N802
     ...
 ```
+
 will pass linting. Although we do not recommend ignoring errors unless you have a good reason to do so.
 
 It is run by calling `flake8` in the project root.
@@ -60,12 +66,12 @@ It is run by calling `isort .` in the project root. Notice the dot at the end, i
 
 ### Pre-commit: run linting before committing
 
-This third tool doesn't check your code, but rather makes sure that you actually *do* check it.
+This third tool doesn't check your code, but rather makes sure that you actually _do_ check it.
 
 It makes use of a feature called [Git hooks](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks) which allow you to run a piece of code before running `git commit`.
 The good thing about it is that it will cancel your commit if the lint doesn't pass. You won't have to wait for Github Actions to report and have a second fix commit.
 
-It is *installed* by running `pre-commit install` and can be run manually by calling only `pre-commit`.
+It is _installed_ by running `pre-commit install` and can be run manually by calling only `pre-commit`.
 
 [Lint before you push!](https://soundcloud.com/lemonsaurusrex/lint-before-you-push)
 
@@ -102,6 +108,7 @@ One person in the team, preferably the leader, will have to create the repositor
 5. Select **Manage access**.
 
 <!-- Yes, this is inline html. The source image is too vertical to be displayed with 100% width. -->
+
 <img src="https://docs.github.com/assets/images/help/repository/manage-access-tab.png" style="width: 30%"></img>
 
 6. Click **Invite a collaborator**.
@@ -120,13 +127,17 @@ Our default setup includes a bare requirement file to be used with a [virtual en
 We recommend this if you never have used any other dependency manager, although if you have, feel free to switch to it. More on that below.
 
 #### Creating the environment
+
 Create a virtual environment in the folder `.venv`.
+
 ```shell
 $ python -m venv .venv
 ```
 
 #### Enter the environment
+
 It will change based on your operating system and shell.
+
 ```shell
 # Linux, Bash
 $ source .venv/bin/activate
@@ -143,13 +154,17 @@ $ .venv/bin/Activate.ps1
 ```
 
 #### Installing the Dependencies
+
 Once the environment is created and activated, use this command to install the development dependencies.
+
 ```shell
 $ pip install -r dev-requirements.txt
 ```
 
 #### Exiting the environment
+
 Interestingly enough, it is the same for every platform
+
 ```shell
 $ deactivate
 ```

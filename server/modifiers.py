@@ -195,7 +195,12 @@ class Modifiers:
 
 
 if __name__ == "__main__":
-    test_lines = ["def say_hello() -> str:\n", '    return "Hello!"\n', "say_hello()\n", "\n"]
+    test_lines = [
+        "def say_hello() -> str:\n",
+        '    return "Hello!"\n',
+        "say_hello()\n",
+        "\n",
+    ]
 
     modifiers = Modifiers(test_lines)
     print(modifiers.output)
