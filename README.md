@@ -1,3 +1,10 @@
+# Kindly Kappa
+
+## Backend
+
+To start the backend up, make sure you are in the root folder and run `uvicorn server.main:app --reload`.
+To test a dummy frontend, you can use `python -m websockets ws://localhost:8000/room`
+
 # Python Discord Code Jam Repository Template
 
 ## A Primer
