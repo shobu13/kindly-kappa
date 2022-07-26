@@ -9,10 +9,10 @@ from typing import Literal, TypedDict
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
 
 from .codes import StatusCode
 from .errors import RoomNotFoundError
+from .events import ConnectData, DisconnectData, EventRequest, EventResponse, EventType, ReplaceData
 
 app = FastAPI()
 
@@ -36,23 +36,21 @@ class Client:
         """Accepts the WebSocket connection."""
         await self._websocket.accept()
 
-    async def send(self, data: dict) -> None:
+    async def send(self, data: EventResponse) -> None:
         """Sends JSON data over the WebSocket connection.
 
         Args:
-            data: The data to be sent to the client, it should always contain a
-                "type" key to indicate the event type.
+            data: The data to be sent to the client.
         """
-        await self._websocket.send_json(data)
+        await self._websocket.send_json(data.dict())
 
-    async def receive(self) -> dict:
+    async def receive(self) -> EventRequest:
         """Receives JSON data over the WebSocket connection.
 
         Returns:
-            The data received from the client, it should always contain a "type"
-            key to indicate the event type.
+            The data received from the client.
         """
-        return await self._websocket.receive_json()
+        return EventRequest(**await self._websocket.receive_json())
 
     async def close(self) -> None:
         """Closes the WebSocket connection."""
@@ -64,7 +62,7 @@ class Client:
         If the object is not an instance of Client, NotImplemented is returned.
 
         Args:
-            other: The object to compare the Client to.
+            other: The object to compare the client to.
 
         Returns:
             True if the id of the client is equal to the other client's id,
@@ -105,28 +103,22 @@ class ConnectionManager:
         """
         self._rooms: ActiveRooms = {}
 
-    def create_room(self, client: Client, room_code: str) -> None:
-        """Create the room for the client.
+    @staticmethod
+    def connect(client: Client, room_code: str, connection_type: Literal["create", "join"]) -> None:
+        """Connects the client to a room.
+
+        It creates or joins a room based on the connection_type.
 
         Args:
-            client: The Client to which the connection belongs.
-            room_code: The room to which the client will be connected.
+            client: The client to connect.
+            room_code: The code of the room.
+            connection_type: The type of the connection.
         """
-        if not self.room_exists(room_code):
-            self._rooms[room_code] = {"owner_id": client.id, "clients": set(), "code": ""}
-        self._rooms[room_code]["clients"].add(client)
-
-    def join_room(self, client: Client, room_code: str) -> None:
-        """Adds a client to an active room.
-
-        Args:
-            client: The Client to which the connection belongs.
-            room_code: The room from which the client will be disconnected.
-        """
-        if self.room_exists(room_code):
-            self._rooms[room_code]["clients"].add(client)
-        else:
-            raise RoomNotFoundError(f"The room with code '{room_code}' was not found.")
+        match connection_type:
+            case "create":
+                manager.create_room(client, room_code)
+            case "join":
+                manager.join_room(client, room_code)
 
     def disconnect(self, client: Client, room_code: str) -> None:
         """Removes the connection from the active connections.
@@ -134,7 +126,7 @@ class ConnectionManager:
         If, after the disconnection, the room is empty, delete it.
 
         Args:
-            client: The Client to which the connection belongs.
+            client: The client to disconnect.
             room_code: The room from which the client will be disconnected.
         """
         self._rooms[room_code]["clients"].remove(client)
@@ -142,23 +134,30 @@ class ConnectionManager:
         if len(self._rooms[room_code]["clients"]) == 0:
             del self._rooms[room_code]
 
-    async def broadcast(self, data: dict, room_code: str, sender: Client | None = None) -> None:
-        """Broadcasts data to all active connections.
+    def create_room(self, client: Client, room_code: str) -> None:
+        """Create the room for the client.
 
         Args:
-            data: The data to be sent to the clients, it should always contain a
-                "type" key to indicate the event type.
-            room_code: The room to which the data will be sent.
-            sender (optional): The client who sent the message.
+            client: The client that will join to the new room.
+            room_code: The room to which the client will be connected.
         """
-        self._update_code_cache(room_code, data["data"]["code"])
+        if not self._room_exists(room_code):
+            self._rooms[room_code] = {"owner_id": client.id, "clients": set(), "code": ""}
+        self._rooms[room_code]["clients"].add(client)
 
-        for connection in self._rooms[room_code]["clients"]:
-            if connection == sender:
-                continue
-            await connection.send(data)
+    def join_room(self, client: Client, room_code: str) -> None:
+        """Adds a client to an active room.
 
-    def room_exists(self, room_code: str) -> bool:
+        Args:
+            client: The client that will join the given room.
+            room_code: The room to which the client will be connected.
+        """
+        if self._room_exists(room_code):
+            self._rooms[room_code]["clients"].add(client)
+        else:
+            raise RoomNotFoundError(f"The room with code '{room_code}' was not found.")
+
+    def _room_exists(self, room_code: str) -> bool:
         """Checks if a room exists.
 
         Args:
@@ -171,41 +170,38 @@ class ConnectionManager:
             return True
         return False
 
-    def _update_code_cache(self, room_code: str, code: list[dict[str, int | str]]) -> None:
+    def update_code_cache(self, room_code: str, replace_data: ReplaceData) -> None:
         """Updates the code cache for a particular room.
 
         Args:
             room_code: The code associated with a particular room.
             code: A list of changes to make to the code cache.
         """
-        if self.room_exists(room_code):
+        if self._room_exists(room_code):
             current_code = self._rooms[room_code]["code"]
-            for replacement_data in code:
-                from_index = replacement_data["from"]
-                to_index = replacement_data["to"]
-                new_value = replacement_data["value"]
+            for replacement in replace_data.code:
+                from_index = replacement["from"]
+                to_index = replacement["to"]
+                new_value = replacement["value"]
 
                 updated_code = current_code[:from_index] + new_value + current_code[to_index:]
                 self._rooms[room_code]["code"] = updated_code
 
+    async def broadcast(self, data: EventResponse, room_code: str, sender: Client | None = None) -> None:
+        """Broadcasts data to all active connections.
+
+        Args:
+            data: The data to be sent to the clients.
+            room_code: The room to which the data will be sent.
+            sender (optional): The client who sent the message.
+        """
+        for connection in self._rooms[room_code]["clients"]:
+            if connection == sender:
+                continue
+            await connection.send(data)
+
 
 manager = ConnectionManager()
-
-
-class ConnectionEventData(BaseModel):
-    """A model representing the connection event data."""
-
-    message: str
-    difficulty: int
-    room_code: str
-    connection_type: Literal["create", "join"]
-
-
-class ConnectionData(BaseModel):
-    """A model representing the initial connection."""
-
-    type: str
-    data: ConnectionEventData
 
 
 @app.websocket("/room")
@@ -218,38 +214,43 @@ async def room(websocket: WebSocket) -> None:
     """
     client = Client(websocket)
     await client.accept()
+
     try:
-        initial_data = ConnectionData(**await client.receive())
+        initial_event = await client.receive()
     except WebSocketDisconnect:
         return
 
-    room_code = initial_data.data.room_code
-    if initial_data.type == "connect":
-        match initial_data.data.connection_type:
-            case "create":
-                manager.create_room(client, room_code)
-            case "join":
-                try:
-                    manager.join_room(client, room_code)
-                except RoomNotFoundError as e:
-                    # Send off to frontend to handle
-                    await client.send(
-                        {
-                            "type": "error",
-                            "data": {
-                                "message": e.message,
-                            },
-                            "status_code": StatusCode.ROOM_NOT_FOUND,
-                        }
-                    )
-                    await client.close()
-                    return
-            case _:
-                raise NotImplementedError
+    if initial_event.type != EventType.CONNECT:
+        return
+
+    initial_data: ConnectData = initial_event.data
+    room_code = initial_data.room_code
+
+    try:
+        ConnectionManager.connect(client, room_code, initial_data.connection_type)
+    except RoomNotFoundError as e:
+        await client.send(e.data)
+        await client.close()
+        return
+
+    await manager.broadcast(initial_event, room_code)
 
     try:
         while True:
-            data = await client.receive()
-            await manager.broadcast(data, room_code, sender=client)
+            event = await client.receive()
+
+            if event.type == EventType.REPLACE:
+                manager.update_code_cache(room_code, event.data)
+
+            await manager.broadcast(event, room_code)
     except WebSocketDisconnect:
+        await manager.broadcast(
+            EventResponse(
+                type=EventType.DISCONNECT,
+                data=DisconnectData(username=initial_data.username),
+                status_code=StatusCode.SUCCESS,
+            ),
+            room_code,
+            sender=client,
+        )
         manager.disconnect(client, room_code)
