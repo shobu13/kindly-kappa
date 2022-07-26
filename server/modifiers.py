@@ -9,6 +9,7 @@ from typing_extensions import Self
 FOUR_SPACES = "    "
 TWO_SPACES = "  "
 STATEMENTS = ["cj9_kappa", "kindly_kappas", "buggy_feature", "jammers"]
+TYPES = ["bool", "int", "float", "bin", "str", "list", "tuple"]
 
 STARTSWITH_DEF_REGEX = re.compile(r"^\s*(async\s+def|def)\s(.*):")
 
@@ -79,7 +80,7 @@ class Modifiers:
         line_subset = random.sample(line_numbers, min(self.difficulty, len(line_numbers)))
         for num in line_subset:
             self.modified_contents[num] = self.modified_contents[num].replace(FOUR_SPACES, TWO_SPACES)
-            self.modified_count += 1
+        self.modified_count += 1
 
         return self
 
@@ -100,7 +101,7 @@ class Modifiers:
         line_subset = random.sample(line_numbers, min(self.difficulty, len(line_numbers)))
         for num in line_subset:
             self.modified_contents[num] = self.modified_contents[num].replace(":", "")
-            self.modified_count += 1
+        self.modified_count += 1
 
         return self
 
@@ -122,7 +123,7 @@ class Modifiers:
         line_subset = random.sample(number_keyword_pairs, min(self.difficulty, len(number_keyword_pairs)))
         for num, key in line_subset:
             self.modified_contents[num] = self.modified_contents[num].replace(key, random.choice(STATEMENTS))
-            self.modified_count += 1
+        self.modified_count += 1
 
         return self
 
@@ -142,7 +143,7 @@ class Modifiers:
         line_subset = random.sample(line_numbers, min(self.difficulty, len(line_numbers)))
         for num in line_subset:
             self.modified_contents[num] = f"# {self.modified_contents[num]}"
-            self.modified_count += 1
+        self.modified_count += 1
 
         return self
 
@@ -183,7 +184,7 @@ class Modifiers:
                     self.modified_contents[num] = self.modified_contents[num].replace(
                         func_name, random.choice(STATEMENTS)
                     )
-                    self.modified_count += 1
+        self.modified_count += 1
 
         return self
 
@@ -200,6 +201,104 @@ class Modifiers:
 
         statement = f"if {random.choice(STATEMENTS)}\n"
         self.modified_contents[random_position] = f"{self.modified_contents[random_position]}\n{statement}"
+        self.modified_count += 1
+
+        return self
+
+    def reverse_booleans(self) -> Self:
+        """A code modifier that messes up some conditions.
+
+        This will reverse True and False keywords.
+
+        Returns:
+            The modifier instance.
+        """
+        number_boolean_pairs = []
+        for num, line in enumerate(self.file_contents):
+            if any(key in line for key in ["True", "False"]):
+                number_boolean_pairs.extend([(num, key) for key in ["True", "False"] if key in line])
+
+        line_subset = random.sample(number_boolean_pairs, min(self.difficulty, len(number_boolean_pairs)))
+        for num, key in line_subset:
+            self.modified_contents[num] = self.modified_contents[num].replace(
+                key, str(bool(["True", "False"].index(key)))
+            )
+        self.modified_count += 1
+
+        return self
+
+    def break_equals_statement(self) -> Self:
+        """A code modifier that causes a SyntaxError.
+
+        This will change == to =.
+
+        Returns:
+            The modifier instance.
+        """
+        line_numbers = []
+        for num, line in enumerate(self.file_contents):
+            if "==" in line:
+                line_numbers.append(num)
+
+        line_subset = random.sample(line_numbers, min(self.difficulty, len(line_numbers)))
+        for num in line_subset:
+            self.modified_contents[num] = self.modified_contents[num].replace("==", "=")
+        self.modified_count += 1
+
+        return self
+
+    def mix_type_keywords(self) -> Self:
+        """A code modifier that causes a ValueError.
+
+        This will mix type keywords.
+
+        Returns:
+            The modifier instance.
+        """
+        number_type_pairs = []
+        for num, line in enumerate(self.file_contents):
+            if any(key in line for key in TYPES):
+                number_type_pairs.extend([(num, key) for key in TYPES if key in line])
+
+        line_subset = random.sample(number_type_pairs, min(self.difficulty, len(number_type_pairs)))
+        for num, key in line_subset:
+            self.modified_contents[num] = self.modified_contents[num].replace(
+                key, random.choice([type_kw for type_kw in TYPES if type_kw != key])
+            )
+        self.modified_count += 1
+
+        return self
+
+    def add_or_remove_brackets(self) -> Self:
+        """A code modifier that causes a SyntaxError.
+
+        This will randomly add or remove brackets
+        with prioritisation of more nested expressions.
+
+        Returns:
+            The modifier instance.
+        """
+        line_count_brackets = []
+        for num, line in enumerate(self.file_contents):
+            if any(bracket in line for bracket in "()[]"):
+                line_count_brackets.append(
+                    (
+                        num,
+                        line.count("(") + line.count(")") + line.count("[") + line.count("]"),
+                        [(index, bracket) for index, bracket in enumerate(line) if bracket in "()[]"],
+                    )
+                )
+
+        for _ in range(min(self.difficulty, len(line_count_brackets))):
+            chosen = random.choices(
+                population=line_count_brackets, weights=[count[1] for count in line_count_brackets], k=1
+            )[0]
+            line_count_brackets.remove(chosen)
+
+            bracket = random.choice(chosen[2])
+            contents = list(self.modified_contents[chosen[0]])
+            contents[bracket[0]] = random.choice(["", bracket[1] * 2])
+            self.modified_contents[chosen[0]] = "".join(contents)
         self.modified_count += 1
 
         return self

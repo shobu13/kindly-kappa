@@ -1,6 +1,6 @@
 import pytest
 
-from server.modifiers import FOUR_SPACES, STATEMENTS, Modifiers
+from server.modifiers import FOUR_SPACES, STATEMENTS, TYPES, Modifiers
 
 test_input = [
     "def say_hello() -> str:\n",
@@ -27,6 +27,12 @@ def create_instance_with_property():
     yield Modifiers(property_input + test_input)
 
 
+@pytest.fixture
+def create_instance_with_boolean():
+    boolean_input = ["    if 1 == True and 0 == False:\n", "        return 'Hello!'\n"]
+    yield Modifiers(test_input[:1] + boolean_input + test_input[2:])
+
+
 class TestModifiers:
     def test_removing_indentation(self, create_instance: Modifiers):
         value = create_instance.remove_indentation()
@@ -44,11 +50,7 @@ class TestModifiers:
 
         assert isinstance(value, Modifiers)
         assert ":" in value.file_contents[0]
-        assert value.modified_contents == [
-            "def say_hello() -> str\n",
-            '    return "Hello!"\n',
-            "say_hello()\n",
-        ]
+        assert value.modified_contents.count(":") < 2
 
     def test_keyword_changing(self, create_instance: Modifiers):
         value = create_instance.change_keyword()
@@ -85,6 +87,37 @@ class TestModifiers:
 
         assert isinstance(value, Modifiers)
         assert any(stmt in modified for stmt in STATEMENTS for modified in value.modified_contents)
+
+    def test_reversing_booleans(self, create_instance_with_boolean: Modifiers):
+        value = create_instance_with_boolean.reverse_booleans()
+
+        assert isinstance(value, Modifiers)
+        assert ("True" not in value.modified_contents[1]) != ("False" not in value.modified_contents[1])
+        assert (value.modified_contents[1].count("True") == 2) != (value.modified_contents[1].count("False") == 2)
+
+    def test_breaking_equals_statement(self, create_instance_with_boolean: Modifiers):
+        value = create_instance_with_boolean.break_equals_statement()
+
+        assert isinstance(value, Modifiers)
+        assert "==" not in value.modified_contents[1]
+        assert "=" in value.modified_contents[1]
+
+    def test_mixing_type_keywords(self, create_instance: Modifiers):
+        value = create_instance.mix_type_keywords()
+
+        assert isinstance(value, Modifiers)
+        assert "str" not in value.modified_contents[0]
+        assert any(value_type in value.modified_contents[0] for value_type in TYPES)
+
+    def test_adding_or_removing_brackets(self, create_instance: Modifiers):
+        value = create_instance.add_or_remove_brackets()
+
+        assert isinstance(value, Modifiers)
+        assert any(
+            value.file_contents[num].count(bracket) != value.modified_contents[num].count(bracket)
+            for bracket in "()[]"
+            for num in range(len(value.file_contents))
+        )
 
     @pytest.mark.parametrize("difficulty", (1, 2, 3))
     def test_modified_output(self, create_instance: Modifiers, difficulty: int):
