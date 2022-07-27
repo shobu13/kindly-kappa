@@ -5,14 +5,16 @@ This server handles user connection, disconnection and events.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from json.decoder import JSONDecodeError
 from typing import Literal, TypedDict
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from pydantic.error_wrappers import ValidationError
 
 from .codes import StatusCode
-from .errors import RoomNotFoundError
-from .events import ConnectData, DisconnectData, EventRequest, EventResponse, EventType, ReplaceData
+from .errors import RoomAlreadyExistsError, RoomNotFoundError
+from .events import ConnectData, DisconnectData, ErrorData, EventRequest, EventResponse, EventType, ReplaceData
 
 app = FastAPI()
 
@@ -31,6 +33,9 @@ class Client:
         """
         self._websocket = websocket
         self.id = uuid4()
+        self.default_replacement = EventRequest(
+            type=EventType.REPLACE, data=ReplaceData(code=[{"from": 0, "to": 0, "value": ""}])
+        )
 
     async def accept(self) -> None:
         """Accepts the WebSocket connection."""
@@ -44,13 +49,34 @@ class Client:
         """
         await self._websocket.send_json(data.dict())
 
-    async def receive(self) -> EventRequest:
+    async def receive(self) -> EventRequest | None:
         """Receives JSON data over the WebSocket connection.
 
         Returns:
-            The data received from the client.
+            The data received from the client or None if an error occured.
         """
-        return EventRequest(**await self._websocket.receive_json())
+        try:
+            return EventRequest(**await self._websocket.receive_json())
+        except (TypeError, JSONDecodeError):
+            await self.send(
+                EventResponse(
+                    type=EventType.ERROR,
+                    data=ErrorData(message="Invalid request data."),
+                    status_code=StatusCode.INVALID_REQUEST_DATA,
+                ),
+            )
+            return self.default_replacement
+        except (KeyError, ValidationError):
+            await self.send(
+                EventResponse(
+                    type=EventType.ERROR,
+                    data=ErrorData(message="Data not found."),
+                    status_code=StatusCode.DATA_NOT_FOUND,
+                ),
+            )
+            return self.default_replacement
+        except (WebSocketDisconnect, RuntimeError):
+            return
 
     async def close(self) -> None:
         """Closes the WebSocket connection."""
@@ -142,8 +168,9 @@ class ConnectionManager:
             room_code: The room to which the client will be connected.
         """
         if not self._room_exists(room_code):
-            self._rooms[room_code] = {"owner_id": client.id, "clients": set(), "code": ""}
-        self._rooms[room_code]["clients"].add(client)
+            self._rooms[room_code] = {"owner_id": client.id, "clients": {client}, "code": ""}
+        else:
+            raise RoomAlreadyExistsError(f"The room with code '{room_code}' already exists.")
 
     def join_room(self, client: Client, room_code: str) -> None:
         """Adds a client to an active room.
@@ -215,9 +242,8 @@ async def room(websocket: WebSocket) -> None:
     client = Client(websocket)
     await client.accept()
 
-    try:
-        initial_event = await client.receive()
-    except WebSocketDisconnect:
+    initial_event = await client.receive()
+    if initial_event is None:
         return
 
     if initial_event.type != EventType.CONNECT:
@@ -228,7 +254,7 @@ async def room(websocket: WebSocket) -> None:
 
     try:
         ConnectionManager.connect(client, room_code, initial_data.connection_type)
-    except RoomNotFoundError as e:
+    except (RoomNotFoundError, RoomAlreadyExistsError) as e:
         await client.send(e.data)
         await client.close()
         return
@@ -238,19 +264,19 @@ async def room(websocket: WebSocket) -> None:
     try:
         while True:
             event = await client.receive()
+            if event is None:
+                return manager.disconnect(client, room_code)
 
             if event.type == EventType.REPLACE:
                 manager.update_code_cache(room_code, event.data)
 
             await manager.broadcast(event, room_code)
     except WebSocketDisconnect:
-        await manager.broadcast(
+        await client.send(
             EventResponse(
                 type=EventType.DISCONNECT,
                 data=DisconnectData(username=initial_data.username),
                 status_code=StatusCode.SUCCESS,
-            ),
-            room_code,
-            sender=client,
+            )
         )
         manager.disconnect(client, room_code)

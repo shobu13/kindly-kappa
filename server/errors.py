@@ -11,3 +11,14 @@ class RoomNotFoundError(Exception):
         self.data = EventResponse(
             type=EventType.ERROR, data=ErrorData(message=message), status_code=StatusCode.ROOM_NOT_FOUND
         )
+
+
+class RoomAlreadyExistsError(Exception):
+    """Custom exception raised when creating a room that already exists."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+        self.data = EventResponse(
+            type=EventType.ERROR, data=ErrorData(message=message), status_code=StatusCode.ROOM_ALREADY_EXISTS
+        )
