@@ -296,9 +296,9 @@ class Modifiers:
             line_count_brackets.remove(chosen)
 
             bracket = random.choice(chosen[2])
-            contents = list(self.modified_contents[chosen[0]])
-            contents[bracket[0]] = random.choice(["", bracket[1] * 2])
-            self.modified_contents[chosen[0]] = "".join(contents)
+            string_contents = list(self.modified_contents[chosen[0]])
+            string_contents[bracket[0]] = random.choice(["", bracket[1] * 2])
+            self.modified_contents[chosen[0]] = "".join(string_contents)
         self.modified_count += 1
 
         return self

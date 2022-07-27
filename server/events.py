@@ -50,7 +50,7 @@ class ConnectData(EventData):
     username: str
 
     @validator("difficulty", pre=True, always=True)
-    def valid_difficulty(cls, value, values):
+    def valid_difficulty(cls, value, values):  # noqa: U100
         """Validates the difficulty based on the connection type."""
         if values["connection_type"] == "create" and value is None:
             raise ValueError("the difficulty must be specified when creating a room")
@@ -115,11 +115,11 @@ class EventRequest(BaseModel):
     This represent a request made from the client to the server.
     """
 
-    type: EventType
+    type: EventType  # noqa: VNE003
     data: EventData
 
     @validator("data", pre=True)
-    def valid_data(cls, value: EventData | Mapping, values):
+    def valid_data(cls, value: EventData | Mapping, values):  # noqa: U100
         """Validates the data based on the event type."""
         if isinstance(value, EventData):
             value = value.dict()
