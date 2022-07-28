@@ -6,7 +6,7 @@ from operator import methodcaller
 
 from typing_extensions import Self
 
-from .events import ReplaceData
+from server.events import ReplaceData
 
 FOUR_SPACES = "    "
 TWO_SPACES = "  "

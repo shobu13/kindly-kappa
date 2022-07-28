@@ -5,7 +5,7 @@ from typing import Literal, Mapping, TypedDict
 
 from pydantic import BaseModel, validator
 
-from .codes import StatusCode
+from server.codes import StatusCode
 
 Position = tuple[int, int]
 Replacement = TypedDict("Replacement", {"from": int, "to": int, "value": str})

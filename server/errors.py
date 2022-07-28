@@ -1,5 +1,5 @@
-from .codes import StatusCode
-from .events import ErrorData, EventResponse, EventType
+from server.codes import StatusCode
+from server.events import ErrorData, EventResponse, EventType
 
 
 class RoomNotFoundError(Exception):
