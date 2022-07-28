@@ -1,5 +1,6 @@
 import pytest
 
+from server.events import ReplaceData
 from server.modifiers import FOUR_SPACES, STATEMENTS, TYPES, Modifiers
 
 test_input = [
@@ -125,5 +126,5 @@ class TestModifiers:
         value = create_instance.output
 
         assert create_instance.difficulty == difficulty
-        assert isinstance(value, list)
+        assert isinstance(value, ReplaceData)
         assert difficulty <= create_instance.modified_count

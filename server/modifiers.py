@@ -1,10 +1,12 @@
+import difflib
 import keyword
 import random
 import re
 from operator import methodcaller
 
-from deepdiff import DeepDiff
 from typing_extensions import Self
+
+from .events import ReplaceData
 
 FOUR_SPACES = "    "
 TWO_SPACES = "  "
@@ -36,33 +38,23 @@ class Modifiers:
         self.modified_count = 0
 
     @property
-    def output(self) -> list[tuple[int, str]] | list:
+    def output(self) -> ReplaceData:
         """Returns the modified code, if any modifications have been done.
 
         Returns:
             Only the modified lines of code, including the line number.
         """
         method_names = [
-            func for func in dir(Modifiers) if callable(getattr(Modifiers, func)) and not func.startswith("__")
+            func
+            for func in dir(Modifiers)
+            if callable(getattr(Modifiers, func)) and not (func.startswith("__") or func.startswith("_"))
         ]
         methods = map(methodcaller, random.sample(method_names, self.difficulty))
 
         for method in list(methods):
             method(self)
 
-        diff = DeepDiff(self.file_contents, self.modified_contents)
-        line_diffs = []
-
-        try:
-            for line_num, values in diff["values_changed"].items():
-                (num,) = list(filter(lambda x: x.isdigit(), re.split(r"(\d*)", line_num)))
-                new_value = values["new_value"]
-                line_diffs.append((int(num), new_value))
-        except KeyError:
-            # No values were changed
-            pass
-
-        return line_diffs
+        return self._get_replacements()
 
     def remove_indentation(self) -> Self:
         """A code modifier that causes an IndentationError.
@@ -291,7 +283,9 @@ class Modifiers:
 
         for _ in range(min(self.difficulty, len(line_count_brackets))):
             chosen = random.choices(
-                population=line_count_brackets, weights=[count[1] for count in line_count_brackets], k=1
+                population=line_count_brackets,
+                weights=[count[1] for count in line_count_brackets],
+                k=1,
             )[0]
             line_count_brackets.remove(chosen)
 
@@ -302,3 +296,35 @@ class Modifiers:
         self.modified_count += 1
 
         return self
+
+    def _get_replacements(self) -> ReplaceData:
+        """A modifier that modifies the modified contents.
+
+        This method is to convert all of the code modifications
+        into a format that can be sent as an EventResponse to
+        the client.
+
+        Returns:
+            The converted replacement data.
+        """
+        replacements = []
+
+        current_position = 0
+        deletes = 0
+        for input_line, output_line in zip(self.file_contents, self.modified_contents):
+            for diff in difflib.ndiff(input_line, output_line):
+                if diff[0] == "-":
+                    # Removed values should always have the value set to ""
+                    replacements.append(
+                        {"from": current_position - deletes, "to": (current_position + 1) - deletes, "value": ""}
+                    )
+                    deletes += 1
+
+                if diff[0] == "+":
+                    replacements.append(
+                        {"from": current_position - deletes, "to": current_position - deletes, "value": diff[-1]}
+                    )
+
+                current_position += 1
+
+        return ReplaceData(code=replacements)
