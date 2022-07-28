@@ -4,13 +4,21 @@ This server handles user connection, disconnection and events.
 """
 from __future__ import annotations
 
+from typing import cast
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from server.client import Client
 from server.codes import StatusCode
 from server.connection_manager import ConnectionManager
 from server.errors import RoomAlreadyExistsError, RoomNotFoundError
-from server.events import ConnectData, DisconnectData, EventResponse, EventType
+from server.events import (
+    ConnectData,
+    DisconnectData,
+    EventResponse,
+    EventType,
+    ReplaceData,
+)
 
 app = FastAPI()
 
@@ -40,7 +48,7 @@ async def room(websocket: WebSocket) -> None:
     room_code = initial_data.room_code
 
     try:
-        manager.connect(client, room_code, initial_data.connection_type)
+        manager.connect(client, initial_data)
     except (RoomNotFoundError, RoomAlreadyExistsError) as e:
         await client.send(e.data)
         await client.close()
@@ -54,10 +62,16 @@ async def room(websocket: WebSocket) -> None:
             if event is None:
                 return manager.disconnect(client, room_code)
 
+            buggy = False
+            sender = client
+            event_data = cast(ReplaceData, event.data)
             if event.type == EventType.REPLACE:
-                manager.update_code_cache(room_code, event.data)
+                manager.update_code_cache(room_code, event_data)
+            elif event.type == EventType.SEND_BUGS:
+                buggy = True
+                sender = None
 
-            await manager.broadcast(event, room_code)
+            await manager.broadcast(event_data, room_code, sender=sender, buggy=buggy)
     except WebSocketDisconnect:
         await client.send(
             EventResponse(

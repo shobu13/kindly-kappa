@@ -23,6 +23,7 @@ class EventType(str, Enum):
     MOVE = "move"
     REPLACE = "replace"
     ERROR = "error"
+    SEND_BUGS = "bugs"
 
 
 class EventData(BaseModel):

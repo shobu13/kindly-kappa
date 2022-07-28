@@ -3,12 +3,7 @@ import pytest
 from server.events import ReplaceData
 from server.modifiers import FOUR_SPACES, STATEMENTS, TYPES, Modifiers
 
-test_input = [
-    "def say_hello() -> str:\n",
-    '    return "Hello!"\n',
-    "say_hello()\n",
-    "\n",
-]
+test_input = 'def say_hello() -> str:\n    return "Hello!"\nsay_hello()\n\n'
 
 
 @pytest.fixture
@@ -18,20 +13,20 @@ def create_instance():
 
 @pytest.fixture
 def create_instance_with_dunder():
-    dunder_input = ["class Test:\n", "    def __init__(self) -> None:\n", "        ...\n", "\n"]
+    dunder_input = "class Test:\n    def __init__(self) -> None:\n        ...\n\n"
     yield Modifiers(dunder_input + test_input)
 
 
 @pytest.fixture
 def create_instance_with_property():
-    property_input = ["class Test:\n", "    @property\n", "    def output(self) -> None:\n", "\n"]
+    property_input = "class Test:\n    @property\n    def output(self) -> None:\n\n"
     yield Modifiers(property_input + test_input)
 
 
 @pytest.fixture
 def create_instance_with_boolean():
-    boolean_input = ["    if 1 == True and 0 == False:\n", "        return 'Hello!'\n"]
-    yield Modifiers(test_input[:1] + boolean_input + test_input[2:])
+    boolean_input = "    if 1 == True and 0 == False:\n        return 'Hello!'\n"
+    yield Modifiers(test_input[:24] + boolean_input + test_input[81:])
 
 
 class TestModifiers:
@@ -40,11 +35,8 @@ class TestModifiers:
 
         assert isinstance(value, Modifiers)
         assert value.file_contents[1].startswith(FOUR_SPACES)
-        assert value.modified_contents == [
-            "def say_hello() -> str:\n",
-            '  return "Hello!"\n',
-            "say_hello()\n",
-        ]
+        print(value.modified_contents)
+        assert value.modified_contents == ["def say_hello() -> str:\n", '  return "Hello!"\n', "say_hello()\n", "\n"]
 
     def test_removing_end_colon(self, create_instance: Modifiers):
         value = create_instance.remove_end_colon()

@@ -1,9 +1,10 @@
-from typing import Literal, TypeAlias, TypedDict
+from typing import TypeAlias, TypedDict
 from uuid import UUID
 
 from server.client import Client
 from server.errors import RoomAlreadyExistsError, RoomNotFoundError
-from server.events import EventResponse, ReplaceData
+from server.events import ConnectData, ReplaceData, SyncData
+from server.modifiers import Modifiers
 
 
 class RoomData(TypedDict):
@@ -27,21 +28,20 @@ class ConnectionManager:
         """
         self._rooms: ActiveRooms = {}
 
-    def connect(self, client: Client, room_code: str, connection_type: Literal["create", "join"]) -> None:
+    def connect(self, client: Client, data: ConnectData) -> None:
         """Connects the client to a room.
 
         It creates or joins a room based on the connection_type.
 
         Args:
             client: The client to connect.
-            room_code: The code of the room.
-            connection_type: The type of the connection.
+            data: The data of a connection event.
         """
-        match connection_type:
+        match data.connection_type:
             case "create":
-                self.create_room(client, room_code)
+                self.create_room(client, data.room_code, data.difficulty)
             case "join":
-                self.join_room(client, room_code)
+                self.join_room(client, data.room_code)
 
     def disconnect(self, client: Client, room_code: str) -> None:
         """Removes the connection from the active connections.
@@ -57,15 +57,16 @@ class ConnectionManager:
         if not self._rooms[room_code]["clients"]:
             del self._rooms[room_code]
 
-    def create_room(self, client: Client, room_code: str) -> None:
+    def create_room(self, client: Client, room_code: str, difficulty: int) -> None:
         """Create the room for the client.
 
         Args:
             client: The client that will join to the new room.
             room_code: The room to which the client will be connected.
+            difficulty: The difficuty of the room.
         """
         if not self._room_exists(room_code):
-            self._rooms[room_code] = {"owner_id": client.id, "clients": {client}, "code": ""}
+            self._rooms[room_code] = {"owner_id": client.id, "clients": {client}, "code": "", "difficulty": difficulty}
         else:
             raise RoomAlreadyExistsError(f"The room with code '{room_code}' already exists.")
 
@@ -98,14 +99,21 @@ class ConnectionManager:
                 updated_code = current_code[:from_index] + new_value + current_code[to_index:]
                 self._rooms[room_code]["code"] = updated_code
 
-    async def broadcast(self, data: EventResponse, room_code: str, sender: Client | None = None) -> None:
+    async def broadcast(
+        self, data: SyncData | ReplaceData, room_code: str, sender: Client | None = None, buggy: bool = False
+    ) -> None:
         """Broadcasts data to all active connections.
 
         Args:
             data: The data to be sent to the clients.
             room_code: The room to which the data will be sent.
             sender (optional): The client who sent the message.
+            buggy (optional): To send back modified code.
         """
+        if buggy:
+            data = self._modify_code(room_code)
+            self.update_code_cache(room_code, data)
+
         for connection in self._rooms[room_code]["clients"]:
             if connection == sender:
                 continue
@@ -123,3 +131,18 @@ class ConnectionManager:
         if room_code in self._rooms:
             return True
         return False
+
+    def _modify_code(self, room_code: str) -> ReplaceData:
+        """Generates bugs based on the current code cache.
+
+        Args:
+            room_code: The code associated with a particular room.
+
+        Returns:
+            A list, or a list of modified changes including the line number.
+        """
+        current_code = self._rooms[room_code]["code"]
+        current_difficulty = self._rooms[room_code]["difficulty"]
+        modifier = Modifiers(current_code, current_difficulty)
+
+        return modifier.output

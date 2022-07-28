@@ -14,7 +14,7 @@ class DummyClient:
 def connection():
     manager = ConnectionManager()
     dummy_client = DummyClient()
-    manager.create_room(dummy_client, "CODE")
+    manager.create_room(dummy_client, "CODE", 1)
     return manager
 
 

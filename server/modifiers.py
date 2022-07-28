@@ -19,7 +19,7 @@ STARTSWITH_DEF_REGEX = re.compile(r"^\s*(async\s+def|def)\s(.*):")
 class Modifiers:
     """A set of code modifying methods."""
 
-    def __init__(self, file_contents: list[str], difficulty: int = 1) -> None:
+    def __init__(self, file_contents: str, difficulty: int = 1) -> None:
         """This class has functions which introduce different types of bugs.
 
         All the functions should return Self so they can be chained to
@@ -31,10 +31,11 @@ class Modifiers:
             file_contents: The raw data received from the websocket.
             difficulty: The level of difficulty selected. Defaults to 1.
         """
-        self.file_contents = file_contents[:-1]  # Removes the last "\n"
+        _list_of_lines = [f"{line}\n" for line in file_contents.split("\n")][:-1]
+        self.file_contents = _list_of_lines.copy()
         self.difficulty = difficulty
 
-        self.modified_contents = file_contents[:-1]
+        self.modified_contents = _list_of_lines
         self.modified_count = 0
 
     @property
