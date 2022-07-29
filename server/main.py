@@ -4,21 +4,12 @@ This server handles user connection, disconnection and events.
 """
 from __future__ import annotations
 
-from typing import cast
-
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from server.client import Client
-from server.codes import StatusCode
 from server.connection_manager import ConnectionManager
 from server.errors import RoomAlreadyExistsError, RoomNotFoundError
-from server.events import (
-    ConnectData,
-    DisconnectData,
-    EventResponse,
-    EventType,
-    ReplaceData,
-)
+from server.events import EventHandler, EventType
 
 app = FastAPI()
 
@@ -36,48 +27,32 @@ async def room(websocket: WebSocket) -> None:
     """
     client = Client(websocket)
     await client.accept()
+    handler = EventHandler(client, manager)
 
     initial_event = await client.receive()
-    if initial_event is None:
-        return
-
     if initial_event.type != EventType.CONNECT:
         return
 
-    initial_data: ConnectData = initial_event.data
-    room_code = initial_data.room_code
+    room_code = initial_event.data.room_code
+    *_, initial_data = handler(initial_event, room_code)
 
     try:
         manager.connect(client, initial_data)
-    except (RoomNotFoundError, RoomAlreadyExistsError) as e:
-        await client.send(e.data)
+    except (RoomNotFoundError, RoomAlreadyExistsError) as err:
+        await client.send(err.response)
         await client.close()
         return
 
-    await manager.broadcast(initial_event, room_code)
+    await manager.broadcast(initial_data, room_code)
 
     try:
         while True:
             event = await client.receive()
-            if event is None:
-                return manager.disconnect(client, room_code)
-
-            buggy = False
-            sender = client
-            event_data = cast(ReplaceData, event.data)
-            if event.type == EventType.REPLACE:
-                manager.update_code_cache(room_code, event_data)
-            elif event.type == EventType.SEND_BUGS:
-                buggy = True
-                sender = None
+            buggy, sender, event_data = handler(event, room_code)
 
             await manager.broadcast(event_data, room_code, sender=sender, buggy=buggy)
-    except WebSocketDisconnect:
-        await client.send(
-            EventResponse(
-                type=EventType.DISCONNECT,
-                data=DisconnectData(username=initial_data.username),
-                status_code=StatusCode.SUCCESS,
-            )
-        )
+    except WebSocketDisconnect as err:
+        await manager.broadcast(err.response, room_code, sender=client)
         manager.disconnect(client, room_code)
+    except NotImplementedError as err:
+        await client.send(err.response)

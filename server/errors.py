@@ -8,7 +8,7 @@ class RoomNotFoundError(Exception):
     def __init__(self, message: str) -> None:
         super().__init__(message)
 
-        self.data = EventResponse(
+        self.response = EventResponse(
             type=EventType.ERROR, data=ErrorData(message=message), status_code=StatusCode.ROOM_NOT_FOUND
         )
 
@@ -19,6 +19,6 @@ class RoomAlreadyExistsError(Exception):
     def __init__(self, message: str) -> None:
         super().__init__(message)
 
-        self.data = EventResponse(
+        self.response = EventResponse(
             type=EventType.ERROR, data=ErrorData(message=message), status_code=StatusCode.ROOM_ALREADY_EXISTS
         )

@@ -5,7 +5,14 @@ from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from server.codes import StatusCode
-from server.events import ErrorData, EventRequest, EventResponse, EventType, ReplaceData
+from server.events import (
+    DisconnectData,
+    ErrorData,
+    EventRequest,
+    EventResponse,
+    EventType,
+    ReplaceData,
+)
 
 
 class Client:
@@ -26,6 +33,8 @@ class Client:
             type=EventType.REPLACE, data=ReplaceData(code=[{"from": 0, "to": 0, "value": ""}])
         )
 
+        self.username: str
+
     async def accept(self) -> None:
         """Accepts the WebSocket connection."""
         await self._websocket.accept()
@@ -38,11 +47,12 @@ class Client:
         """
         await self._websocket.send_json(data.dict())
 
-    async def receive(self) -> EventRequest | None:
+    async def receive(self) -> EventRequest:
         """Receives JSON data over the WebSocket connection.
 
         Returns:
-            The data received from the client or None if an error occured.
+            The data received from the client or default EventRequests if an
+            error occured.
         """
         try:
             return EventRequest(**await self._websocket.receive_json())
@@ -65,7 +75,7 @@ class Client:
             )
             return self.default_replacement
         except (WebSocketDisconnect, RuntimeError):
-            return
+            return EventRequest(type=EventType.DISCONNECT, data=DisconnectData(username=self.username))
 
     async def close(self) -> None:
         """Closes the WebSocket connection."""

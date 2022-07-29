@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal, Mapping, TypedDict
+from typing import TYPE_CHECKING, Literal, Mapping, TypedDict, cast
 
+from fastapi import WebSocketDisconnect
 from pydantic import BaseModel, validator
 
 from server.codes import StatusCode
+
+if TYPE_CHECKING:
+    from server.client import Client
+    from server.connection_manager import ConnectionManager
+
 
 Position = tuple[int, int]
 Replacement = TypedDict("Replacement", {"from": int, "to": int, "value": str})
@@ -146,3 +152,66 @@ class EventResponse(EventRequest):
     """
 
     status_code: StatusCode
+
+
+class EventHandler:
+    """An request event handler."""
+
+    def __init__(self, client: Client, connection: ConnectionManager):
+        """Initializes the event handler for each client.
+
+        Args:
+            client: The client sending the requests.
+            connection: The connection to the room.
+        """
+        self.client = client
+        self.manager = connection
+
+    def __call__(self, request: EventRequest, room_code: str) -> tuple[bool, Client | None, type[EventData]]:
+        """Handle a request received.
+
+        Args:
+            request: The data received from the client.
+            room_code: The room to which the data will be sent.
+
+        Raises:
+            WebSocketDisconnect: If the event type is a disconnect.
+            NotImplementedError: In any other case.
+
+        Returns:
+            A tuple of data for input in the `ConnectionManager.broadcast`
+            method.
+        """
+        buggy = False
+        data = cast(ReplaceData, request.data)
+
+        match request.type:
+            case EventType.REPLACE:
+                self.manager.update_code_cache(room_code, data)
+            case EventType.SEND_BUGS:
+                # Only if receiving the event. If not, we can remove
+                buggy = True
+                self.client = None
+            case EventType.CONNECT:
+                data = cast(ConnectData, request.data)
+                self.client.username = data.username
+            case EventType.DISCONNECT:
+                data = cast(DisconnectData, request.data)
+                response = EventResponse(
+                    type=EventType.DISCONNECT,
+                    data=data,
+                    status_code=StatusCode.SUCCESS,
+                )
+                WebSocketDisconnect.response = response
+                raise WebSocketDisconnect
+            case _:
+                # Anything that doesn't match the request.type
+                response = EventResponse(
+                    type=EventType.ERROR,
+                    data=ErrorData(message="This has not been implemented yet."),
+                    status_code=StatusCode.DATA_NOT_FOUND,
+                )
+                NotImplementedError.response = response
+                raise NotImplementedError
+
+        return buggy, self.client, data
