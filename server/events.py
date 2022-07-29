@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 
 Position = tuple[int, int]
+UserInfo = list[dict[str, str]]
 Replacement = TypedDict("Replacement", {"from": int, "to": int, "value": str})
 
 
@@ -83,7 +84,7 @@ class SyncData(EventData):
     """
 
     code: str
-    collaborators: list[str]
+    collaborators: UserInfo
 
 
 class MoveData(EventData):
@@ -167,7 +168,7 @@ class EventHandler:
         self.client = client
         self.manager = connection
 
-    def __call__(self, request: EventRequest, room_code: str) -> tuple[bool, Client | None, type[EventData]]:
+    async def __call__(self, request: EventRequest, room_code: str) -> tuple[bool, Client, type[EventData]]:
         """Handle a request received.
 
         Args:
@@ -183,27 +184,64 @@ class EventHandler:
             method.
         """
         buggy = False
-        data = cast(ReplaceData, request.data)
+        event_data = request.data
+        data = None
 
         match request.type:
             case EventType.REPLACE:
-                self.manager.update_code_cache(room_code, data)
-            case EventType.SEND_BUGS:
-                # Only if receiving the event. If not, we can remove
-                buggy = True
-                self.client = None
+                replace_data = cast(ReplaceData, event_data)
+                data = EventResponse(type=EventType.REPLACE, data=replace_data, status_code=StatusCode.SUCCESS)
+                self.connection.update_code_cache(room_code, replace_data)
             case EventType.CONNECT:
-                data = cast(ConnectData, request.data)
-                self.client.username = data.username
+                connect_data = cast(ConnectData, event_data)
+                self.client.username = connect_data.username
+
+                match connect_data.connection_type:
+                    case "create":
+                        if connect_data.difficulty is None:
+                            return buggy, self.client, data
+                        self.connection.create_room(self.client, connect_data.room_code, connect_data.difficulty)
+                    case "join":
+                        self.connection.join_room(self.client, room_code)
+                        current_room = self.connection._rooms[room_code]
+                        collaborators = [{"id": c.id.hex, "username": c.username} for c in current_room["clients"]]
+                        await self(
+                            EventRequest(
+                                type=EventType.SYNC,
+                                data=SyncData(code=current_room["code"], collaborators=collaborators),
+                            ),
+                            room_code,
+                        )
             case EventType.DISCONNECT:
-                data = cast(DisconnectData, request.data)
+                disconnect_data = cast(DisconnectData, event_data)
                 response = EventResponse(
                     type=EventType.DISCONNECT,
-                    data=data,
+                    data=disconnect_data,
                     status_code=StatusCode.SUCCESS,
                 )
-                WebSocketDisconnect.response = response
+                WebSocketDisconnect.response = response  # type: ignore
                 raise WebSocketDisconnect
+            case EventType.SYNC:
+                # Send the sync event to the client to update code/collaborators
+                # Send an event to everyone else to update collaborators
+                sync_data = cast(SyncData, event_data)
+                await self.client.send(
+                    EventResponse(type=EventType.SYNC, data=sync_data, status_code=StatusCode.SUCCESS)
+                )
+                connect_data = cast(
+                    ConnectData,
+                    {
+                        "connection_type": "join",
+                        "difficulty": None,
+                        "room_code": room_code,
+                        "username": self.client.username,
+                    },
+                )
+                await self.connection.broadcast(
+                    EventResponse(type=EventType.CONNECT, data=connect_data, status_code=StatusCode.SUCCESS),
+                    room_code,
+                    sender=self.client,
+                )
             case _:
                 # Anything that doesn't match the request.type
                 response = EventResponse(
@@ -211,7 +249,7 @@ class EventHandler:
                     data=ErrorData(message="This has not been implemented yet."),
                     status_code=StatusCode.DATA_NOT_FOUND,
                 )
-                NotImplementedError.response = response
+                NotImplementedError.response = response  # type: ignore
                 raise NotImplementedError
 
         return buggy, self.client, data

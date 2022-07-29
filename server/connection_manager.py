@@ -3,7 +3,7 @@ from uuid import UUID
 
 from server.client import Client
 from server.errors import RoomAlreadyExistsError, RoomNotFoundError
-from server.events import ConnectData, EventData, ReplaceData
+from server.events import EventResponse, ReplaceData
 from server.modifiers import Modifiers
 
 
@@ -27,21 +27,6 @@ class ConnectionManager:
         It stores the active connections and is able to broadcast data.
         """
         self._rooms: ActiveRooms = {}
-
-    def connect(self, client: Client, data: ConnectData) -> None:
-        """Connects the client to a room.
-
-        It creates or joins a room based on the connection_type.
-
-        Args:
-            client: The client to connect.
-            data: The data of a connection event.
-        """
-        match data.connection_type:
-            case "create":
-                self.create_room(client, data.room_code, data.difficulty)
-            case "join":
-                self.join_room(client, data.room_code)
 
     def disconnect(self, client: Client, room_code: str) -> None:
         """Removes the connection from the active connections.
@@ -100,19 +85,19 @@ class ConnectionManager:
                 self._rooms[room_code]["code"] = updated_code
 
     async def broadcast(
-        self, data: type[EventData], room_code: str, sender: Client | None = None, buggy: bool = False
+        self, data: EventResponse, room_code: str, sender: Client | None = None, buggy: bool = False
     ) -> None:
         """Broadcasts data to all active connections.
 
         Args:
             data: The data to be sent to the clients.
             room_code: The room to which the data will be sent.
-            sender (optional): The client who sent the message.
+            sender (optional): The client who sent the request.
             buggy (optional): To send back modified code.
         """
         if buggy:
             data = self._modify_code(room_code)
-            self.update_code_cache(room_code, data)
+            self.update_code_cache(room_code, data.data)
 
         for connection in self._rooms[room_code]["clients"]:
             if connection == sender:

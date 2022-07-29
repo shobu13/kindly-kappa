@@ -34,21 +34,18 @@ async def room(websocket: WebSocket) -> None:
         return
 
     room_code = initial_event.data.room_code
-    *_, initial_data = handler(initial_event, room_code)
 
     try:
-        manager.connect(client, initial_data)
+        await handler(initial_event, room_code)
     except (RoomNotFoundError, RoomAlreadyExistsError) as err:
         await client.send(err.response)
         await client.close()
         return
 
-    await manager.broadcast(initial_data, room_code)
-
     try:
         while True:
             event = await client.receive()
-            buggy, sender, event_data = handler(event, room_code)
+            buggy, sender, event_data = await handler(event, room_code)
 
             await manager.broadcast(event_data, room_code, sender=sender, buggy=buggy)
     except WebSocketDisconnect as err:
