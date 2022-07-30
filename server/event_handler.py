@@ -107,7 +107,11 @@ class EventHandler:
                         self.manager.join_room(self.client, self.room_code)
                         self.room = self.manager._rooms[self.room_code]
 
-                        collaborators = [{"id": c.id.hex, "username": c.username} for c in self.room.clients]
+                        collaborators = [
+                            {"id": c.id.hex, "username": c.username}
+                            for c in self.room.clients
+                            if c.id != self.client.id
+                        ]
 
                         # Send a sync event to the client to update the code and
                         # the collaborators' list
