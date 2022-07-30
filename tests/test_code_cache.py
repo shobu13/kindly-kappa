@@ -19,22 +19,22 @@ def connection():
 
 
 @pytest.fixture
-def update_cache(connection):
+def update_code(connection):
     new_data = ReplaceData(code=[{"from": 0, "to": 1, "value": "a"}])
-    connection.update_code_cache("CODE", new_data)
+    connection._rooms["CODE"].update_code(new_data)
 
 
 class TestCodeCache:
     def test_code_cache_empty_on_connect(self, connection: ConnectionManager):
-        assert connection._rooms["CODE"]["code"] == ""
+        assert connection._rooms["CODE"].code == ""
 
-    def test_code_cache_added(self, connection: ConnectionManager, update_cache):
-        assert connection._rooms["CODE"]["code"] == "a"
+    def test_code_cache_added(self, connection: ConnectionManager, update_code):
+        assert connection._rooms["CODE"].code == "a"
 
-    def test_code_cache_replacement(self, connection: ConnectionManager, update_cache):
-        assert connection._rooms["CODE"]["code"] == "a"
+    def test_code_cache_replacement(self, connection: ConnectionManager, update_code):
+        assert connection._rooms["CODE"].code == "a"
 
         new_data = ReplaceData(code=[{"from": 0, "to": 1, "value": "b"}])
-        connection.update_code_cache("CODE", new_data)
+        connection._rooms["CODE"].update_code(new_data)
 
-        assert connection._rooms["CODE"]["code"] == "b"
+        assert connection._rooms["CODE"].code == "b"

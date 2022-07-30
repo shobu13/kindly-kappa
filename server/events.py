@@ -1,20 +1,14 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, Literal, Mapping, TypedDict, cast
+from typing import Literal, Mapping, TypedDict
 
-from fastapi import WebSocketDisconnect
 from pydantic import BaseModel, validator
 
 from server.codes import StatusCode
 
-if TYPE_CHECKING:
-    from server.client import Client
-    from server.connection_manager import ConnectionManager
-
-
-Position = tuple[int, int]
 UserInfo = list[dict[str, str]]
+Position = TypedDict("Position", {"x": int, "y": int})
 Replacement = TypedDict("Replacement", {"from": int, "to": int, "value": str})
 
 
@@ -66,13 +60,7 @@ class ConnectData(EventData):
 
 
 class DisconnectData(EventData):
-    """The data of a disconnection event.
-
-    Fields:
-        username: The username of the user disconnecting.
-    """
-
-    username: str
+    """The data of a disconnection event."""
 
 
 class SyncData(EventData):
@@ -117,6 +105,10 @@ class ErrorData(EventData):
     message: str
 
 
+class SendBugsData(EventData):
+    """The data of a bugs introduction event."""
+
+
 class EventRequest(BaseModel):
     """A WebSocket request event.
 
@@ -139,10 +131,14 @@ class EventRequest(BaseModel):
                 value = DisconnectData(**value)
             case EventType.SYNC:
                 value = SyncData(**value)
+            case EventType.MOVE:
+                value = MoveData(**value)
             case EventType.REPLACE:
                 value = ReplaceData(**value)
             case EventType.ERROR:
                 value = ErrorData(**value)
+            case EventType.SEND_BUGS:
+                value = SendBugsData(**value)
         return value
 
 
@@ -153,103 +149,3 @@ class EventResponse(EventRequest):
     """
 
     status_code: StatusCode
-
-
-class EventHandler:
-    """An request event handler."""
-
-    def __init__(self, client: Client, connection: ConnectionManager):
-        """Initializes the event handler for each client.
-
-        Args:
-            client: The client sending the requests.
-            connection: The connection to the room.
-        """
-        self.client = client
-        self.manager = connection
-
-    async def __call__(self, request: EventRequest, room_code: str) -> tuple[bool, Client, type[EventData]]:
-        """Handle a request received.
-
-        Args:
-            request: The data received from the client.
-            room_code: The room to which the data will be sent.
-
-        Raises:
-            WebSocketDisconnect: If the event type is a disconnect.
-            NotImplementedError: In any other case.
-
-        Returns:
-            A tuple of data for input in the `ConnectionManager.broadcast`
-            method.
-        """
-        buggy = False
-        event_data = request.data
-        data = None
-
-        match request.type:
-            case EventType.REPLACE:
-                replace_data = cast(ReplaceData, event_data)
-                data = EventResponse(type=EventType.REPLACE, data=replace_data, status_code=StatusCode.SUCCESS)
-                self.connection.update_code_cache(room_code, replace_data)
-            case EventType.CONNECT:
-                connect_data = cast(ConnectData, event_data)
-                self.client.username = connect_data.username
-
-                match connect_data.connection_type:
-                    case "create":
-                        if connect_data.difficulty is None:
-                            return buggy, self.client, data
-                        self.connection.create_room(self.client, connect_data.room_code, connect_data.difficulty)
-                    case "join":
-                        self.connection.join_room(self.client, room_code)
-                        current_room = self.connection._rooms[room_code]
-                        collaborators = [{"id": c.id.hex, "username": c.username} for c in current_room["clients"]]
-                        await self(
-                            EventRequest(
-                                type=EventType.SYNC,
-                                data=SyncData(code=current_room["code"], collaborators=collaborators),
-                            ),
-                            room_code,
-                        )
-            case EventType.DISCONNECT:
-                disconnect_data = cast(DisconnectData, event_data)
-                response = EventResponse(
-                    type=EventType.DISCONNECT,
-                    data=disconnect_data,
-                    status_code=StatusCode.SUCCESS,
-                )
-                WebSocketDisconnect.response = response  # type: ignore
-                raise WebSocketDisconnect
-            case EventType.SYNC:
-                # Send the sync event to the client to update code/collaborators
-                # Send an event to everyone else to update collaborators
-                sync_data = cast(SyncData, event_data)
-                await self.client.send(
-                    EventResponse(type=EventType.SYNC, data=sync_data, status_code=StatusCode.SUCCESS)
-                )
-                connect_data = cast(
-                    ConnectData,
-                    {
-                        "connection_type": "join",
-                        "difficulty": None,
-                        "room_code": room_code,
-                        "username": self.client.username,
-                    },
-                )
-                await self.connection.broadcast(
-                    EventResponse(type=EventType.CONNECT, data=connect_data, status_code=StatusCode.SUCCESS),
-                    room_code,
-                    sender=self.client,
-                )
-            case _:
-                # Anything that doesn't match the request.type
-                response = EventResponse(
-                    type=EventType.ERROR,
-                    data=ErrorData(message="This has not been implemented yet."),
-                    status_code=StatusCode.DATA_NOT_FOUND,
-                )
-                NotImplementedError.response = response  # type: ignore
-                raise NotImplementedError
-
-        return buggy, self.client, data
