@@ -2,8 +2,8 @@ from datetime import datetime
 from uuid import UUID
 
 from server.client import Client
-from server.events import Position, ReplaceData
-from server.modifiers import Modifiers
+from server.events import Position, ReplaceData, Replacement
+from server.modifiers import FOUR_SPACES, Modifiers
 
 
 class Room:
@@ -35,8 +35,10 @@ class Room:
         # This checks if there was a de-indent (E.g after a function or class)
         # and adds the newline since it doesn't get passed from the frontend
         if len(replace_data.code) == 2:
-            new_value = {"value": "\n    "}
-            replace_data.code[1] |= new_value
+            new_value = f"\n{FOUR_SPACES}"
+            repalcement_value = Replacement(**replace_data.code[1])
+            repalcement_value["value"] = new_value
+            replace_data.code[1] |= repalcement_value
 
         for replacement in replace_data.code:
             from_index = replacement["from"]

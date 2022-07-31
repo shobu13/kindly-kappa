@@ -7,7 +7,7 @@ from pydantic import BaseModel, validator
 
 from server.codes import StatusCode
 
-Time = TypedDict("Time", {"min": int, "sec": int, "mil": int})
+Time = TypedDict("Time", {"min": float, "sec": float, "mil": float})
 UserInfo = list[dict[str, str]]
 Position = TypedDict("Position", {"x": int, "y": int})
 Replacement = TypedDict("Replacement", {"from": int, "to": int, "value": str})

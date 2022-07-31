@@ -154,7 +154,7 @@ class EventHandler:
             case EventType.SYNC:
                 # Validate the sender is the room owner
                 if self.client.id != self.room.owner_id:
-                    return
+                    return False
 
                 sync_data = cast(SyncData, event_data)
                 self.room.set_code(sync_data.code)
@@ -248,6 +248,6 @@ class EventHandler:
         deltaseconds = (datetime.now() - self.room.epoch).total_seconds()
         minutes, remainder = divmod(deltaseconds, 60)
         seconds, milliseconds = divmod(remainder, 1)
-        time = {"min": minutes, "sec": seconds, "mil": milliseconds}
+        time = Time(min=minutes, sec=seconds, mil=milliseconds)
 
         return collaborators, time
