@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import cast
 
 from server.client import Client
@@ -6,6 +7,7 @@ from server.connection_manager import ConnectionManager
 from server.errors import RoomAlreadyExistsError, RoomNotFoundError
 from server.events import (
     ConnectData,
+    DisconnectData,
     ErrorData,
     EvaluateData,
     EventRequest,
@@ -14,6 +16,8 @@ from server.events import (
     MoveData,
     ReplaceData,
     SyncData,
+    Time,
+    UserInfo,
 )
 from server.room import Room
 from server.snekbox import evaluate
@@ -50,24 +54,20 @@ class EventHandler:
                 status_code=StatusCode.INVALID_REQUEST_DATA,
             )
             await self.client.send(response)
-            await self.client.close()
             return
 
         try:
             await self(initial_event)
         except (RoomNotFoundError, RoomAlreadyExistsError) as err:
             await self.client.send(err.response)
-            await self.client.close()
 
     async def __call__(self, request: EventRequest) -> bool:
         """Handle a request received.
 
         Args:
             request: The data received from the client.
-
         Returns:
             True if the connection has been closed, False otherwise.
-
         Raises:
             WebSocketDisconnect: If the event type is a disconnect.
             NotImplementedError: In any other case.
@@ -95,13 +95,18 @@ class EventHandler:
                         self.manager.create_room(self.client, connect_data.room_code, connect_data.difficulty)
                         self.room = self.manager._rooms[self.room_code]
 
-                        collaborators = [{"id": c.id.hex, "username": c.username} for c in self.room.clients]
+                        collaborators, time = self._get_sync_state()
 
                         # Send a sync event to the client to update the code and
                         # the collaborators' list
                         response = EventResponse(
                             type=EventType.SYNC,
-                            data=SyncData(code=self.room.code, collaborators=collaborators),
+                            data=SyncData(
+                                code=self.room.code,
+                                collaborators=collaborators,
+                                time=time,
+                                owner_id=self.room.owner_id.hex,
+                            ),
                             status_code=StatusCode.SUCCESS,
                         )
                         await self.client.send(response)
@@ -109,17 +114,18 @@ class EventHandler:
                         self.manager.join_room(self.client, self.room_code)
                         self.room = self.manager._rooms[self.room_code]
 
-                        collaborators = [
-                            {"id": c.id.hex, "username": c.username}
-                            for c in self.room.clients
-                            if c.id != self.client.id
-                        ]
+                        collaborators, time = self._get_sync_state()
 
                         # Send a sync event to the client to update the code and
                         # the collaborators' list
                         response = EventResponse(
                             type=EventType.SYNC,
-                            data=SyncData(code=self.room.code, collaborators=collaborators),
+                            data=SyncData(
+                                code=self.room.code,
+                                collaborators=collaborators,
+                                time=time,
+                                owner_id=self.room.owner_id.hex,
+                            ),
                             status_code=StatusCode.SUCCESS,
                         )
                         await self.client.send(response)
@@ -133,23 +139,38 @@ class EventHandler:
                         )
                         await self.manager.broadcast(response, self.room_code, sender=self.client)
             case EventType.DISCONNECT:
-                collaborators = [
-                    {"id": c.id.hex, "username": c.username} for c in self.room.clients if c.id != self.client.id
-                ]
-
-                # Broadcast to other clients a sync event to update the
+                # Broadcast to other clients a disconnect event to update the
                 # collaborators' list
                 response = EventResponse(
-                    type=EventType.SYNC,
-                    data=SyncData(code=self.room.code, collaborators=collaborators),
+                    type=EventType.DISCONNECT,
+                    data=DisconnectData(user=[{"id": self.client.id.hex, "username": self.client.username}]),
                     status_code=StatusCode.SUCCESS,
                 )
                 await self.manager.broadcast(response, self.room_code, sender=self.client)
 
                 self.manager.disconnect(self.client, self.room_code)
-                await self.client.close()
+            case EventType.SYNC:
+                # Validate the sender is the room owner
+                if self.client.id != self.room.owner_id:
+                    return
 
-                return True
+                sync_data = cast(SyncData, event_data)
+                self.room.set_code(sync_data.code)
+
+                collaborators, time = self._get_sync_state()
+
+                # Broadcast to every client (including sender) a sync event
+                response = EventResponse(
+                    type=EventType.SYNC,
+                    data=SyncData(
+                        code=sync_data.code,
+                        collaborators=collaborators,
+                        time=time,
+                        owner_id=self.room.owner_id.hex,
+                    ),
+                    status_code=StatusCode.SUCCESS,
+                )
+                await self.manager.broadcast(response, self.room_code)
             case EventType.MOVE:
                 move_data = cast(MoveData, event_data)
                 self.room.cursors[self.client.id] = move_data.position
@@ -168,12 +189,14 @@ class EventHandler:
             case EventType.SEND_BUGS:
                 self.room.introduce_bugs()
 
-                collaborators = [{"id": c.id.hex, "username": c.username} for c in self.room.clients]
+                collaborators, time = self._get_sync_state(all_clients=True)
 
                 # Broadcast to every client a sync event to update the code
                 response = EventResponse(
                     type=EventType.SYNC,
-                    data=SyncData(code=self.room.code, collaborators=collaborators),
+                    data=SyncData(
+                        code=self.room.code, collaborators=collaborators, time=time, owner_id=self.room.owner_id.hex
+                    ),
                     status_code=StatusCode.SUCCESS,
                 )
                 await self.manager.broadcast(response, self.room_code)
@@ -197,3 +220,27 @@ class EventHandler:
                 await self.client.send(response)
 
         return False
+
+    def _get_sync_state(self, all_clients: bool = False) -> tuple[UserInfo, Time]:
+        """Get the current state of a Room for syncing.
+
+        Args:
+            all_clients: To include all clients in the collaborators list.
+            Defaults to False.
+
+        Returns:
+            The list of collaborators as well as the current time for syncing.
+        """
+        if all_clients:
+            collaborators = [{"id": c.id.hex, "username": c.username} for c in self.room.clients]
+        else:
+            collaborators = [
+                {"id": c.id.hex, "username": c.username} for c in self.room.clients if c.id != self.client.id
+            ]
+
+        deltaseconds = (datetime.now() - self.room.epoch).total_seconds()
+        minutes, remainder = divmod(deltaseconds, 60)
+        seconds, milliseconds = divmod(remainder, 1)
+        time = {"min": minutes, "sec": seconds, "mil": milliseconds}
+
+        return collaborators, time

@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from server.client import Client
@@ -21,6 +22,7 @@ class Room:
         self.difficulty = difficulty
         self.code = ""
         self.cursors: dict[UUID, Position] = {}
+        self.epoch = datetime.now()
 
     def update_code(self, replace_data: ReplaceData) -> None:
         """Updates the code.
@@ -43,6 +45,14 @@ class Room:
 
             updated_code = current_code[:from_index] + new_value + current_code[to_index:]
             self.code = updated_code
+
+    def set_code(self, updated_code: str) -> None:
+        """Sets the code.
+
+        Args:
+            updated_code: A string containing the new code.
+        """
+        self.code = updated_code
 
     def introduce_bugs(self) -> ReplaceData:
         """Introduces bugs based on the current code.

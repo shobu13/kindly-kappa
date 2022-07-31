@@ -7,6 +7,7 @@ from pydantic import BaseModel, validator
 
 from server.codes import StatusCode
 
+Time = TypedDict("Time", {"min": int, "sec": int, "mil": int})
 UserInfo = list[dict[str, str]]
 Position = TypedDict("Position", {"x": int, "y": int})
 Replacement = TypedDict("Replacement", {"from": int, "to": int, "value": str})
@@ -61,7 +62,13 @@ class ConnectData(EventData):
 
 
 class DisconnectData(EventData):
-    """The data of a disconnection event."""
+    """The data of a disconnection event.
+
+    Fields:
+        user (optional): A list of users that are disconnecting
+    """
+
+    user: UserInfo | None = None
 
 
 class SyncData(EventData):
@@ -70,10 +77,14 @@ class SyncData(EventData):
     Fields:
         code: The code that already exists in the room.
         collaborators: The list of users that already collaborate in the room.
+        time: The elapsed time since the creation of the room.
+        owner: The id of the owner of the room.
     """
 
     code: str
     collaborators: UserInfo
+    time: Time
+    owner_id: str
 
 
 class MoveData(EventData):

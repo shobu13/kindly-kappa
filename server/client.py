@@ -16,7 +16,6 @@ class Client:
 
         A client is identified by an ID and contains the corresponding WebSocket
         that is used to send and receive messages.
-
         Args:
             websocket: A WebSocket instance.
         """
@@ -76,10 +75,8 @@ class Client:
         """Compares the Client to another object.
 
         If the object is not an instance of Client, NotImplemented is returned.
-
         Args:
             other: The object to compare the client to.
-
         Returns:
             True if the id of the client is equal to the other client's id,
             False otherwise.

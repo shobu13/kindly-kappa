@@ -1,7 +1,7 @@
 import pytest
 
+from server.connection_manager import ConnectionManager
 from server.events import ReplaceData
-from server.main import ConnectionManager
 
 
 class DummyClient:
