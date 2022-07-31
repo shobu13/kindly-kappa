@@ -57,6 +57,7 @@ const sync = ref({
   difficulty: 0,
   time: undefined,
   ownerID: "",
+  ownID: "",
 });
 
 let joining = false;
@@ -125,8 +126,12 @@ websocket.onmessage = function (ev) {
       code: message.data.code,
       difficulty: message.data.difficulty,
       time: message.data.time,
-      ownerID: message.data.ownerID,
+      owner_id: message.data.owner_id,
+      ownID: "",
     };
+  }
+  if (message.type === "connect") {
+    sync.value.ownID = message.data.user_id;
     joined.value = true;
   }
 

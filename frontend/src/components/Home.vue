@@ -186,14 +186,12 @@ function createRoom() {
         <input
           type="range"
           min="1"
-          max="5"
+          max="3"
           class="range w-full"
           step="1"
           v-model="difficulty"
         />
         <div class="w-full flex justify-between text-xs px-2">
-          <span>|</span>
-          <span>|</span>
           <span>|</span>
           <span>|</span>
           <span>|</span>

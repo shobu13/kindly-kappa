@@ -77,6 +77,7 @@ class EventHandler:
         match request.type:
             case EventType.CONNECT:
                 connect_data = cast(ConnectData, event_data)
+                connect_data.user_id = self.client.id.hex
 
                 self.client.username = connect_data.username
                 self.room_code = connect_data.room_code
@@ -111,6 +112,14 @@ class EventHandler:
                             status_code=StatusCode.SUCCESS,
                         )
                         await self.client.send(response)
+
+                        # Send a connect event to the client
+                        response = EventResponse(
+                            type=EventType.CONNECT,
+                            data=connect_data,
+                            status_code=StatusCode.SUCCESS,
+                        )
+                        await self.client.send(response)
                     case "join":
                         self.manager.join_room(self.client, self.room_code)
                         self.room = self.manager._rooms[self.room_code]
@@ -139,7 +148,7 @@ class EventHandler:
                             data=connect_data,
                             status_code=StatusCode.SUCCESS,
                         )
-                        await self.manager.broadcast(response, self.room_code, sender=self.client)
+                        await self.manager.broadcast(response, self.room_code)
             case EventType.DISCONNECT:
                 # Broadcast to other clients a disconnect event to update the
                 # collaborators' list
@@ -159,7 +168,7 @@ class EventHandler:
                 sync_data = cast(SyncData, event_data)
                 self.room.set_code(sync_data.code)
 
-                collaborators, time = self._get_sync_state()
+                collaborators, time = self._get_sync_state(all_clients=True)
 
                 # Broadcast to every client (including sender) a sync event
                 response = EventResponse(
