@@ -29,6 +29,13 @@ class Room:
             replace_data: A list of changes to make to the code.
         """
         current_code = self.code
+
+        # This checks if there was a de-indent (E.g after a function or class)
+        # and adds the newline since it doesn't get passed from the frontend
+        if len(replace_data.code) == 2:
+            new_value = {"value": "\n    "}
+            replace_data.code[1] |= new_value
+
         for replacement in replace_data.code:
             from_index = replacement["from"]
             to_index = replacement["to"]
