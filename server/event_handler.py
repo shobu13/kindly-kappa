@@ -106,6 +106,7 @@ class EventHandler:
                                 collaborators=collaborators,
                                 time=time,
                                 owner_id=self.room.owner_id.hex,
+                                difficulty=self.room.difficulty,
                             ),
                             status_code=StatusCode.SUCCESS,
                         )
@@ -125,6 +126,7 @@ class EventHandler:
                                 collaborators=collaborators,
                                 time=time,
                                 owner_id=self.room.owner_id.hex,
+                                difficulty=self.room.difficulty,
                             ),
                             status_code=StatusCode.SUCCESS,
                         )
@@ -167,6 +169,7 @@ class EventHandler:
                         collaborators=collaborators,
                         time=time,
                         owner_id=self.room.owner_id.hex,
+                        difficulty=self.room.difficulty,
                     ),
                     status_code=StatusCode.SUCCESS,
                 )
@@ -195,7 +198,11 @@ class EventHandler:
                 response = EventResponse(
                     type=EventType.SYNC,
                     data=SyncData(
-                        code=self.room.code, collaborators=collaborators, time=time, owner_id=self.room.owner_id.hex
+                        code=self.room.code,
+                        collaborators=collaborators,
+                        time=time,
+                        owner_id=self.room.owner_id.hex,
+                        difficulty=self.room.difficulty,
                     ),
                     status_code=StatusCode.SUCCESS,
                 )
