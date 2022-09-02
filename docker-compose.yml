@@ -1,0 +1,18 @@
+version: '3'
+services:
+  snekbox:
+    image: "ghcr.io/python-discord/snekbox"
+    ports:
+      - "8060:8060"
+  server:
+    image: shobu13/kindly-kappa-server
+    ports:
+      - "8000:8000"
+    depends_on:
+      - snekbox
+  frontend:
+    image: shobu13/kindly-kappa-frontend
+    ports:
+        - "5173:5173"
+    depends_on:
+      - server
