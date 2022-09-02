@@ -1,6 +1,6 @@
 import requests
 
-EVAL_URL = "http://localhost:8060/eval"
+EVAL_URL = "http://snekbox:8060/eval"
 
 
 def evaluate(code: str) -> str:

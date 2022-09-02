@@ -4,6 +4,8 @@ services:
     image: "ghcr.io/python-discord/snekbox"
     ports:
       - "8060:8060"
+    ipc: "none"
+    privileged: true
   server:
     image: shobu13/kindly-kappa-server
     ports:
